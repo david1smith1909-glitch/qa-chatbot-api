@@ -1,85 +1,116 @@
+// Serverless function for Vercel
+// File: api/chat.js
+
 export default async function handler(req, res) {
-  // Handle CORS
+  // Set CORS headers FIRST
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
 
-  // Handle OPTIONS request
+  // Handle preflight OPTIONS request
   if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
+    return res.status(200).end();
   }
 
-  // Only allow POST
+  // Only accept POST
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json({ 
+      error: 'Method not allowed',
+      reply: 'For expert QA guidance, contact Alok at aloksingh00704@gmail.com'
+    });
   }
 
   try {
+    // Parse request body
     const { message } = req.body;
 
-    if (!message || message.trim() === '') {
+    // Validate message
+    if (!message || typeof message !== 'string' || message.trim() === '') {
       return res.status(400).json({ 
-        reply: 'Please ask a question about QA governance, UAT, or defect prevention.' 
+        reply: 'Please ask a question about QA governance, UAT, or testing strategies.'
       });
     }
 
-    // Check if API key exists
-    if (!process.env.GEMINI_API_KEY) {
-      console.error('GEMINI_API_KEY is not set');
-      return res.status(500).json({ 
-        reply: 'For expert QA guidance, please contact Alok at aloksingh00704@gmail.com or schedule a consultation.' 
+    // Check API key
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      console.error('GEMINI_API_KEY not configured');
+      return res.status(200).json({ 
+        reply: 'Thank you for your question! For expert QA guidance on release governance, defect prevention, and UAT coordination, please contact Alok at aloksingh00704@gmail.com or schedule a consultation.'
       });
     }
 
-    const systemPrompt = `You are an enterprise QA consultant assistant for Alok Kumar.
-Answer questions professionally about QA governance, UAT coordination, release management, defect prevention, and testing strategies.
-Keep responses concise (2-3 sentences maximum) and actionable.
-Encourage users to contact Alok at aloksingh00704@gmail.com or schedule a consultation for detailed guidance.`;
+    // System prompt for QA consultant
+    const systemPrompt = `You are a professional QA consultant assistant for Alok Kumar, an Enterprise QA & Release Governance expert.
 
-    // Call Gemini API with correct model
-    const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${process.env.GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: `${systemPrompt}\n\nUser question: ${message}`
-            }]
-          }],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 200,
-          }
-        })
-      }
-    );
+RESPOND IN 2-3 SHORT SENTENCES ONLY.
 
+Answer questions about:
+- QA governance and quality frameworks
+- UAT (User Acceptance Testing) coordination
+- Release management and deployment strategies
+- Defect prevention and risk-based testing
+- Test automation strategies
+- Enterprise QA scaling
+
+Always be professional, concise, and actionable.
+End responses by suggesting they contact Alok at aloksingh00704@gmail.com for detailed guidance.`;
+
+    // Call Gemini API
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`;
+    
+    const geminiResponse = await fetch(geminiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{
+            text: `${systemPrompt}\n\nUser question: ${message}`
+          }]
+        }],
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 150,
+          topP: 0.8,
+        }
+      })
+    });
+
+    // Check Gemini API response
     if (!geminiResponse.ok) {
-      const errorData = await geminiResponse.text();
-      console.error('Gemini API Error:', errorData);
-      throw new Error(`Gemini API error: ${geminiResponse.status}`);
+      const errorText = await geminiResponse.text();
+      console.error('Gemini API error:', geminiResponse.status, errorText);
+      
+      return res.status(200).json({ 
+        reply: 'Thank you for your question about QA! For expert guidance on enterprise QA governance, UAT coordination, and defect prevention, please contact Alok directly at aloksingh00704@gmail.com or schedule a consultation.'
+      });
     }
 
+    // Parse Gemini response
     const data = await geminiResponse.json();
     
-    // Extract the reply
-    const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || 
-                  'Thank you for your question. For expert QA guidance, please contact Alok at aloksingh00704@gmail.com or schedule a consultation call.';
+    // Extract reply
+    let reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    
+    if (!reply) {
+      reply = 'For expert QA guidance on release governance, UAT, and testing strategies, please contact Alok at aloksingh00704@gmail.com or schedule a consultation.';
+    }
 
-    return res.status(200).json({ reply: reply.trim() });
+    // Return success
+    return res.status(200).json({ 
+      reply: reply.trim() 
+    });
 
   } catch (error) {
-    console.error('Chat API Error:', error.message);
+    // Log error for debugging
+    console.error('Chat API Error:', error.message, error.stack);
     
-    // Return friendly error message
+    // Return friendly fallback
     return res.status(200).json({ 
-      reply: 'For expert QA guidance on release governance, UAT, or defect prevention, please contact Alok directly at aloksingh00704@gmail.com or schedule a consultation call.' 
+      reply: 'Thank you for your question! For expert guidance on QA governance, UAT coordination, and defect prevention strategies, please contact Alok directly at aloksingh00704@gmail.com or schedule a consultation call.'
     });
   }
 }
