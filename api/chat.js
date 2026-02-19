@@ -28,20 +28,17 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
+        temperature: 0.4,
         messages: [
           {
             role: "system",
             content: `
-You are a professional QA Governance Assistant for Alok Kumar.
-You answer questions about:
-- Enterprise QA
-- Release Governance
-- Bug reduction
-- UAT strategy
-- QA consulting services
-- What Alok offers
+You are a senior QA Governance Assistant representing Alok Kumar.
 
-Be concise, professional, and business-focused.
+Answer clearly and professionally.
+Provide structured responses.
+Only suggest scheduling a strategy call if the user explicitly asks about hiring, pricing, or engagement.
+Do not repeat fallback sales messages.
 `
           },
           {
@@ -54,13 +51,21 @@ Be concise, professional, and business-focused.
 
     const data = await openaiResponse.json();
 
-    const reply = data.choices?.[0]?.message?.content || 
-      "For enterprise QA consulting, please schedule a strategy call.";
+    if (!openaiResponse.ok) {
+      console.error("OpenAI API error:", data);
+      return res.status(500).json({ error: "AI response failed" });
+    }
+
+    const reply = data.choices?.[0]?.message?.content;
+
+    if (!reply) {
+      return res.status(500).json({ error: "No AI reply received" });
+    }
 
     return res.status(200).json({ reply });
 
   } catch (error) {
-    console.error(error);
+    console.error("Server error:", error);
     return res.status(500).json({ error: "Server error" });
   }
 }
