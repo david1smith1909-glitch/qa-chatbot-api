@@ -20,43 +20,45 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Message required" });
     }
 
-    const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        temperature: 0.4,
-        messages: [
-          {
-            role: "system",
-            content: `
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: `
 You are a senior QA Governance Assistant representing Alok Kumar.
 
 Answer clearly and professionally.
 Provide structured responses.
-Only suggest scheduling a strategy call if the user explicitly asks about hiring, pricing, or engagement.
-Do not repeat fallback sales messages.
+Only suggest scheduling a strategy call if the user explicitly asks about hiring or engagement.
+
+User Question:
+${message}
 `
-          },
-          {
-            role: "user",
-            content: message
-          }
-        ]
-      })
-    });
+                }
+              ]
+            }
+          ]
+        })
+      }
+    );
 
-    const data = await openaiResponse.json();
+    const data = await response.json();
 
-    if (!openaiResponse.ok) {
-      console.error("OpenAI API error:", data);
+    if (!response.ok) {
+      console.error("Gemini API error:", data);
       return res.status(500).json({ error: "AI response failed" });
     }
 
-    const reply = data.choices?.[0]?.message?.content;
+    const reply =
+      data.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!reply) {
       return res.status(500).json({ error: "No AI reply received" });
