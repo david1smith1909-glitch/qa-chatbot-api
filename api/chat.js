@@ -1,11 +1,10 @@
 export default async function handler(req, res) {
 
-  // Enable CORS
+  // CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  // Handle preflight
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
@@ -21,10 +20,44 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Message required" });
     }
 
-    // Example reply (replace with OpenAI call if needed)
-    return res.status(200).json({
-      reply: `You asked: ${message}`
+    const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `
+You are a professional QA Governance Assistant for Alok Kumar.
+You answer questions about:
+- Enterprise QA
+- Release Governance
+- Bug reduction
+- UAT strategy
+- QA consulting services
+- What Alok offers
+
+Be concise, professional, and business-focused.
+`
+          },
+          {
+            role: "user",
+            content: message
+          }
+        ]
+      })
     });
+
+    const data = await openaiResponse.json();
+
+    const reply = data.choices?.[0]?.message?.content || 
+      "For enterprise QA consulting, please schedule a strategy call.";
+
+    return res.status(200).json({ reply });
 
   } catch (error) {
     console.error(error);
