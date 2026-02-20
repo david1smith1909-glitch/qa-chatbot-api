@@ -1,42 +1,32 @@
 import fs from "fs";
-import { pipeline } from "@xenova/transformers";
 
 const dataset = JSON.parse(
   fs.readFileSync("./qa_with_embeddings.json", "utf8")
 );
 
-let extractor;
+function simpleSimilarity(a, b) {
+  const aWords = a.toLowerCase().split(" ");
+  const bWords = b.toLowerCase().split(" ");
+  let matches = 0;
 
-async function getExtractor() {
-  if (!extractor) {
-    extractor = await pipeline(
-      "feature-extraction",
-      "Xenova/all-MiniLM-L6-v2"
-    );
+  for (let word of aWords) {
+    if (bWords.includes(word)) {
+      matches++;
+    }
   }
-  return extractor;
-}
 
-function cosineSimilarity(a, b) {
-  const dot = a.reduce((sum, val, i) => sum + val * b[i], 0);
-  const normA = Math.sqrt(a.reduce((sum, val) => sum + val * val, 0));
-  const normB = Math.sqrt(b.reduce((sum, val) => sum + val * val, 0));
-  return dot / (normA * normB);
+  return matches / Math.max(aWords.length, 1);
 }
 
 export default async function handler(req, res) {
   try {
     const { message } = req.body;
 
-    const extractor = await getExtractor();
-    const output = await extractor(message, { pooling: "mean" });
-    const userEmbedding = Array.from(output.data);
-
     let bestMatch = null;
-    let highestScore = -1;
+    let highestScore = 0;
 
     for (let entry of dataset) {
-      const score = cosineSimilarity(userEmbedding, entry.embedding);
+      const score = simpleSimilarity(message, entry.question);
       if (score > highestScore) {
         highestScore = score;
         bestMatch = entry;
@@ -44,7 +34,7 @@ export default async function handler(req, res) {
     }
 
     return res.status(200).json({
-      reply: bestMatch?.answer || "No answer found."
+      reply: bestMatch?.answer || "Sorry, I don't have an answer for that."
     });
 
   } catch (error) {
