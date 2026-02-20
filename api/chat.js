@@ -1,53 +1,36 @@
 import fs from "fs";
 import path from "path";
 
-// Load dataset safely for Vercel
 const filePath = path.join(process.cwd(), "qa_with_embeddings.json");
-const dataset = JSON.parse(fs.readFileSync(filePath, "utf8"));
+const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
 
-// Stopwords to ignore
-const STOPWORDS = new Set([
-  "the","is","are","does","do","did","a","an","of","to","and","in",
-  "on","for","with","what","which","who","when","where","how",
-  "can","could","would","should","please","tell","me"
-]);
-
-// Normalize text
-function tokenize(text) {
-  return text
-    .toLowerCase()
-    .replace(/[^\w\s]/g, "")
-    .split(/\s+/)
-    .filter(word => word && !STOPWORDS.has(word))
-    .map(word => word.endsWith("s") ? word.slice(0, -1) : word);
+function normalize(text) {
+  return text.toLowerCase().replace(/[^\w\s]/gi, "");
 }
 
-// Keyword-based scoring
-function scoreQuestion(userInput, questionText) {
-  const userTokens = tokenize(userInput);
-  const questionTokens = tokenize(questionText);
-
+function scoreMatch(userInput, item) {
   let score = 0;
+  const input = normalize(userInput);
+  const question = normalize(item.question);
 
-  for (let token of userTokens) {
-    if (questionTokens.includes(token)) {
-      score += 2; // direct keyword match
-    }
+  if (question.includes(input)) score += 5;
 
-    // Partial word match
-    for (let qToken of questionTokens) {
-      if (qToken.includes(token) || token.includes(qToken)) {
-        score += 1;
-      }
-    }
+  if (item.keywords) {
+    item.keywords.forEach(keyword => {
+      if (input.includes(keyword)) score += 3;
+    });
   }
+
+  const words = input.split(" ");
+  words.forEach(word => {
+    if (question.includes(word)) score += 1;
+  });
 
   return score;
 }
 
-export default async function handler(req, res) {
+export default function handler(req, res) {
 
-  // CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -56,41 +39,33 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
+  const userMessage = req.body.message;
 
-  try {
-    const { message } = req.body;
+  let bestMatch = null;
+  let highestScore = 0;
 
-    if (!message || typeof message !== "string") {
-      return res.status(400).json({ error: "Invalid message" });
+  const allEntries = [
+    ...data.intents.services,
+    ...data.intents.industries,
+    ...data.intents.value_proposition,
+    ...data.intents.persona_based
+  ];
+
+  allEntries.forEach(item => {
+    const score = scoreMatch(userMessage, item);
+    if (score > highestScore) {
+      highestScore = score;
+      bestMatch = item;
     }
+  });
 
-    let bestMatch = null;
-    let highestScore = 0;
-
-    for (let entry of dataset) {
-      const score = scoreQuestion(message, entry.question);
-
-      if (score > highestScore) {
-        highestScore = score;
-        bestMatch = entry;
-      }
-    }
-
-    if (!bestMatch || highestScore < 2) {
-      return res.status(200).json({
-        reply: "Sorry, I couldn't find a relevant answer. Please contact us at aloksingh00704@gmail.com directly."
-      });
-    }
-
+  if (highestScore > 2 && bestMatch) {
     return res.status(200).json({
       reply: bestMatch.answer
     });
-
-  } catch (error) {
-    console.error("Server error:", error);
-    return res.status(500).json({ error: "Server error" });
   }
+
+  return res.status(200).json({
+    reply: "I can help with QA strategy, automation, and quality transformation. Could you clarify your question?"
+  });
 }
