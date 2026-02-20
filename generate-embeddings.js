@@ -20,4 +20,8 @@ fs.writeFileSync(
   JSON.stringify(dataset)
 );
 
+<<<<<<< HEAD
 console.log("Embeddings generated successfully.");
+=======
+console.log("Embeddings generated successfully.");
+>>>>>>> 0f8a41b (Generated embeddings)
