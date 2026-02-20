@@ -1,26 +1,48 @@
 import fs from "fs";
 import path from "path";
 
+// ✅ Load dataset safely (works on Vercel)
 const filePath = path.join(process.cwd(), "qa_with_embeddings.json");
+const dataset = JSON.parse(fs.readFileSync(filePath, "utf8"));
 
-const dataset = JSON.parse(
-  fs.readFileSync(filePath, "utf8")
-);
+// ✅ Normalize text
+function normalize(text) {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s]/g, "") // remove punctuation
+    .split(/\s+/)
+    .filter(word =>
+      ![
+        "the", "is", "are", "does", "do", "did",
+        "a", "an", "of", "to", "and", "in",
+        "on", "for", "with", "what", "which",
+        "who", "when", "where", "how"
+      ].includes(word)
+    )
+    .map(word =>
+      word.endsWith("s") ? word.slice(0, -1) : word // basic plural handling
+    );
+}
 
-function simpleSimilarity(a, b) {
-  const aWords = a.toLowerCase().split(" ");
-  const bWords = b.toLowerCase().split(" ");
-  let matches = 0;
+// ✅ Similarity scoring
+function similarityScore(userInput, question) {
+  const userWords = normalize(userInput);
+  const questionWords = normalize(question);
 
-  for (let word of aWords) {
-    if (bWords.includes(word)) matches++;
+  let score = 0;
+
+  for (let word of userWords) {
+    if (questionWords.includes(word)) {
+      score += 1;
+    }
   }
 
-  return matches / Math.max(aWords.length, 1);
+  return score / Math.max(questionWords.length, 1);
 }
 
 export default async function handler(req, res) {
 
+  // ✅ CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -36,23 +58,31 @@ export default async function handler(req, res) {
   try {
     const { message } = req.body;
 
-    if (!message) {
-      return res.status(400).json({ error: "No message provided" });
+    if (!message || typeof message !== "string") {
+      return res.status(400).json({ error: "Invalid message" });
     }
 
     let bestMatch = null;
     let highestScore = 0;
 
     for (let entry of dataset) {
-      const score = simpleSimilarity(message, entry.question);
+      const score = similarityScore(message, entry.question);
+
       if (score > highestScore) {
         highestScore = score;
         bestMatch = entry;
       }
     }
 
+    // ✅ Threshold to avoid wrong matches
+    if (highestScore < 0.3) {
+      return res.status(200).json({
+        reply: "Sorry, I couldn't find an exact answer. Please contact us directly for more information."
+      });
+    }
+
     return res.status(200).json({
-      reply: bestMatch?.answer || "Sorry, I don't have an answer for that."
+      reply: bestMatch.answer
     });
 
   } catch (error) {
