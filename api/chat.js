@@ -1,7 +1,10 @@
 import fs from "fs";
+import path from "path";
+
+const filePath = path.join(process.cwd(), "qa_with_embeddings.json");
 
 const dataset = JSON.parse(
-  fs.readFileSync("./qa_with_embeddings.json", "utf8")
+  fs.readFileSync(filePath, "utf8")
 );
 
 function simpleSimilarity(a, b) {
@@ -10,9 +13,7 @@ function simpleSimilarity(a, b) {
   let matches = 0;
 
   for (let word of aWords) {
-    if (bWords.includes(word)) {
-      matches++;
-    }
+    if (bWords.includes(word)) matches++;
   }
 
   return matches / Math.max(aWords.length, 1);
@@ -20,18 +21,24 @@ function simpleSimilarity(a, b) {
 
 export default async function handler(req, res) {
 
-  // ✅ CORS HEADERS
-  res.setHeader("Access-Control-Allow-Origin", "https://alokqaadvisor.com");
+  res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  // Handle preflight request
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
 
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
   try {
     const { message } = req.body;
+
+    if (!message) {
+      return res.status(400).json({ error: "No message provided" });
+    }
 
     let bestMatch = null;
     let highestScore = 0;
@@ -49,7 +56,7 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error(error);
+    console.error("Server error:", error);
     return res.status(500).json({ error: "Server error" });
   }
 }
